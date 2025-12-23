@@ -167,60 +167,12 @@ st.caption("Interne Rechenhilfe. Therapie/Verordnung immer nach Hausstandard und
 
 weight = st.number_input("Patientengewicht (kg)", min_value=0.0, value=70.0, step=1.0, format="%.1f")
 
-tabs = st.tabs(list(DRUGS.keys()) + ["Custom"])
 
-for i, name in enumerate(list(DRUGS.keys())):
-    drug = DRUGS[name]
-    with tabs[i]:
-        conc, conc_unit = conc_per_ml(drug)
-        st.subheader(name)
-        st.write(
-            f"**Standard:** {drug['amount']} {drug['amount_unit']} auf {drug['volume_ml']} ml  →  "
-            f"**Konzentration:** {conc:.2f} {conc_unit}"
-        )
-        st.write(f"**Einheit laut Tabelle:** `{drug['dose_unit']}`")
-        if drug.get("note"):
-            st.info(drug["note"])
+# --- Medikament auswählen (Dropdown statt Tabs) ---
+options = list(DRUGS.keys()) + ["Custom"]
+choice = st.selectbox("Medikament auswählen", options, index=0)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            direction = st.radio("Rechnen", ["Rate → Dosis", "Dosis → Rate"], horizontal=True, key=f"dir_{i}")
-        with col2:
-            rate_unit = st.selectbox("Raten-Eingabe", ["ml/h", "ml/min"], index=0, key=f"ru_{i}")
-
-        if direction == "Rate → Dosis":
-            rate_in = st.number_input("Rate", min_value=0.0, value=2.0, step=0.1, format="%.2f", key=f"rin_{i}")
-            rate_ml_h = rate_in * 60.0 if rate_unit == "ml/min" else rate_in
-
-            dose, du = dose_from_rate(rate_ml_h, weight, drug)
-            st.metric(label=f"Dosis ({du})", value=fmt(dose))
-
-            # Zusatzinfos: ml/min anzeigen
-            st.write(f"Rate: **{rate_ml_h/60.0:.2f} ml/min**  |  **{rate_ml_h:.2f} ml/h**")
-
-        else:
-            target = st.number_input(f"Zieldosis ({drug['dose_unit']})", min_value=0.0, value=float(drug.get("start") or 0.0),
-                                     step=0.01, format="%.2f", key=f"t_{i}")
-            rate_ml_h = rate_from_dose(target, weight, drug)
-            if rate_ml_h is None:
-                st.warning("Für diese Einheit ist ein gültiges Gewicht nötig.")
-            st.metric(label="Benötigte Rate (ml/h)", value=fmt(rate_ml_h))
-            if rate_ml_h is not None:
-                st.write(f"= **{rate_ml_h/60.0:.2f} ml/min**")
-
-        # Start/Max als Orientierung
-        start = drug.get("start")
-        mx = drug.get("max")
-        if start is not None or mx is not None:
-            st.divider()
-            cols = st.columns(2)
-            if start is not None:
-                cols[0].write(f"**Start (laut Blatt):** {start} {drug['dose_unit']}")
-            if mx is not None:
-                cols[1].write(f"**Max (laut Blatt):** {mx} {drug['dose_unit']}")
-
-# Custom tab
-with tabs[-1]:
+if choice == "Custom":
     st.subheader("Custom‑Perfusor")
     st.write("Für Mischungen, die nicht in der Standardliste sind.")
 
@@ -232,29 +184,46 @@ with tabs[-1]:
     with c3:
         vol = st.number_input("Volumen (ml)", min_value=1.0, value=50.0, step=1.0, format="%.0f")
 
-    dose_unit = st.selectbox("Ziel-/Ausgabe-Einheit", ["µg/kg/min", "µg/kg/h", "mg/kg/h", "µg/h", "mg/h", "IE/h"])
-    drug = {"amount": amt, "amount_unit": amt_unit, "volume_ml": vol, "dose_unit": dose_unit}
+    dose_unit = st.selectbox("Ziel-/Ausgabe-Einheit", ["µg/kg/min", "µg/kg/h", "mg/kg/h", "ng/kg/min", "IE/h"])
+    drug = {
+        "amount": amt, "amount_unit": amt_unit, "volume_ml": vol,
+        "dose_unit": dose_unit, "start": None, "max": None,
+        "note": "Custom‑Mischung (keine Speicherung von Daten)."
+    }
+else:
+    drug = DRUGS[choice]
+    st.subheader(choice)
 
-    conc, conc_unit = conc_per_ml(drug)
-    st.write(f"**Konzentration:** {conc:.2f} {conc_unit}")
+conc, conc_unit = conc_per_ml(drug)
+st.caption(f"**Konzentration:** {conc_unit} (automatisch aus Menge/Volumen)")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        direction = st.radio("Rechnen", ["Rate → Dosis", "Dosis → Rate"], horizontal=True, key="dir_custom")
-    with col2:
-        rate_unit = st.selectbox("Raten-Eingabe", ["ml/h", "ml/min"], index=0, key="ru_custom")
+# Hinweis/Start/Max
+if drug.get("note"):
+    st.info(drug["note"])
+if drug.get("start") is not None:
+    st.markdown(f"**Start (laut Blatt):** {drug['start']} {drug['dose_unit']}")
+if drug.get("max") is not None:
+    st.markdown(f"**Max (laut Blatt):** {drug['max']} {drug['dose_unit']}")
 
-    if direction == "Rate → Dosis":
-        rate_in = st.number_input("Rate", min_value=0.0, value=2.0, step=0.1, format="%.2f", key="rin_custom")
-        rate_ml_h = rate_in * 60.0 if rate_unit == "ml/min" else rate_in
-        dose, du = dose_from_rate(rate_ml_h, weight, drug)
-        st.metric(label=f"Dosis ({du})", value=fmt(dose))
-        st.write(f"Rate: **{rate_ml_h/60.0:.2f} ml/min**  |  **{rate_ml_h:.2f} ml/h**")
-    else:
-        target = st.number_input(f"Zieldosis ({dose_unit})", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="t_custom")
-        rate_ml_h = rate_from_dose(target, weight, drug)
-        if rate_ml_h is None:
-            st.warning("Für diese Einheit ist ein gültiges Gewicht nötig.")
-        st.metric(label="Benötigte Rate (ml/h)", value=fmt(rate_ml_h))
-        if rate_ml_h is not None:
-            st.write(f"= **{rate_ml_h/60.0:.2f} ml/min**")
+st.markdown("---")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### Rate → Dosis")
+    rate_ml_h = st.number_input("Rate (ml/h)", min_value=0.0, value=2.0, step=0.1, format="%.2f", key="rate_ml_h")
+    dose = dose_from_rate(rate_ml_h, weight_kg, drug)
+    du = drug["dose_unit"]
+    st.metric(label=f"Dosis ({du})", value=fmt(dose))
+    st.write(f"= **{rate_ml_h/60.0:.2f} ml/min**")
+
+with col2:
+    st.markdown("### Dosis → Rate")
+    target = st.number_input(f"Zieldosis ({drug['dose_unit']})", min_value=0.0,
+                             value=float(drug["start"]) if drug.get("start") is not None else 0.0,
+                             step=0.1, format="%.2f", key="target")
+    rate_ml_h2 = rate_from_dose(target, weight_kg, drug)
+    st.metric(label="Benötigte Rate (ml/h)", value=fmt(rate_ml_h2))
+    if rate_ml_h2 is not None:
+        st.write(f"= **{rate_ml_h2/60.0:.2f} ml/min**")
+
