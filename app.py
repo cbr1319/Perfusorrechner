@@ -164,6 +164,10 @@ def fmt(x):
 # ---- UI ----
 st.title("Perfusor‑Rechner 13H3")
 st.caption("Interne Rechenhilfe. Therapie/Verordnung immer nach Hausstandard und ärztlicher Anordnung.")
+st.markdown("### Patient")
+weight_kg = st.number_input("Gewicht (kg)", min_value=0.0, value=70.0, step=0.5, format="%.1f")
+st.markdown("---")
+
 
 weight = st.number_input("Patientengewicht (kg)", min_value=0.0, value=70.0, step=1.0, format="%.1f")
 
